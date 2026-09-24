@@ -1,0 +1,186 @@
+{
+  "id": "rzsnAfjmSxltwvDT",
+  "name": "Atelier Écriture — Test 1 Chapitre (Rédacteur → Critique → Gate)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "b588afd8-2a58-429c-a73a-6b1ffc7702a2",
+      "name": "Démarrage manuel",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -368,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== DONNÉES DE TEST (à remplacer plus tard par le state.json de l'Architecte) =====\nconst meta = {\n  these_centrale: \"L'IA locale rend la souveraineté numérique accessible aux indépendants et PME, sans budget datacenter.\",\n  ton: \"Pédagogue, direct, ancré dans la pratique. Posture d'apprenant curieux, jamais de ton donneur de leçons.\",\n  public_cible: \"Professionnels non-techniciens curieux d'IA, dirigeants de petites structures\",\n  interdits: [\"jargon non expliqué\", \"promesses non sourcées\", \"ton commercial\"]\n};\n\nconst terminologie = {\n  \"modèle open-weight\": \"modèle dont les poids sont téléchargeables et exécutables localement, sans que le code d'entraînement soit forcément public\",\n  \"inférence\": \"le fait de faire tourner un modèle pour produire une réponse\"\n};\n\nconst chapitre = {\n  numero: 1,\n  titre: \"Pourquoi faire tourner une IA chez soi change tout\",\n  objectif: \"Le lecteur comprend les 3 raisons concrètes (confidentialité, coût, contrôle) de préférer une IA locale, et sait juger si c'est pertinent pour son cas.\",\n  points_cles: [\n    \"La confidentialité : aucune donnée ne quitte la machine, exemples concrets (documents clients, données santé, stratégie)\",\n    \"Le coût : comparaison abonnement API vs matériel amorti, ordre de grandeur chiffré\",\n    \"Le contrôle : pas de modèle retiré du jour au lendemain, pas de changement de conditions\",\n    \"Les limites honnêtes : qualité inférieure au frontier, matériel nécessaire\",\n    \"Grille de décision simple : dans quels cas local, dans quels cas API\"\n  ]\n};\n\nconst resumes_precedents = \"(aucun — premier chapitre)\";\n\nreturn [{ json: { meta, terminologie, chapitre, resumes_precedents, iteration: 2, critiques_eventuelles: \"Verdict : L'auteure a établi un bon équilibre entre clarté et profondeur des idées, tout en soulignant les faiblesses de l'approche API.\\nPassage faible : \\\"Imaginez le cas concret d’une PME de conseil juridique. Ses dossiers contiennent des informations clients hyper-sensibles, soumises au secret professionnel.\\\" → Ce passage est ambigu et ne claire pas la problématique.\\nPassage faible : \\\"Le fait d’exécuter le processus d’inférence localement signifie que rien, absolument rien, ne quitte votre machine ou votre réseau privé.\\\" → L'extraction est incomplète et ne met pas en lumière la faiblesse relative à une IA API.\\nPassage faible : \\\"Le coût cumulé des API peut dépasser très rapidement le prix d’une bonne carte graphique dédiée ou d’un mini-ordinateur puissant (type NUC) adapté au calcul local.\\\" → L'extraction est incomplète et ne met pas en lumière la faiblesse relative à une IA API.\\nPassage faible : \\\"Le risque n’est pas nécessairement une intention malveillante de la part du fournisseur (bien qu'il faille toujours rester vigilant),\\\" → Ce passage est ambigu et ne claire pas la problématique.\" } }];"
+      },
+      "id": "3ea3140f-64d0-4444-8f5d-7b96929f14a2",
+      "name": "Données de test",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -144,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== CONSTRUCTION DU BODY POUR LE RÉDACTEUR (gemma3:12b) =====\nconst d = $json;\n\nconst system = `Tu es écrivain professionnel. Tu rédiges UN chapitre de livre, en français, d'après un plan strict.\n\nRÈGLES ABSOLUES :\n1. Tu rédiges UNIQUEMENT le chapitre demandé. Pas d'introduction du type \"Voici le chapitre\", pas de commentaire, pas de conclusion méta. Ta réponse commence directement par le titre du chapitre en niveau markdown ## et continue en prose.\n2. Tu couvres TOUS les points_cles du plan, dans un ordre logique, sans en ajouter d'autres.\n3. Tu respectes la these_centrale et le ton définis dans le contexte. Tu n'utilises jamais les éléments listés dans \"interdits\".\n4. Tu utilises la terminologie EXACTEMENT comme définie dans le glossaire fourni. Si tu introduis un terme technique nouveau, tu le définis à sa première occurrence.\n5. Cohérence : tu ne répètes pas ce que les résumés des chapitres précédents indiquent comme déjà traité. Tu peux y faire référence brièvement (\"comme vu au chapitre 3\").\n6. Longueur : entre 1500 et 2500 mots.\n7. Structure : prose fluide dominante. Maximum 2 listes à puces dans tout le chapitre. Sous-titres (###) toutes les 400-600 mots environ.\n8. Chaque affirmation chiffrée ou factuelle précise est marquée [VERIF] juste après. Exemple : \"le marché a triplé en cinq ans [VERIF]\".\n9. SI des critiques te sont fournies (mode reprise) : tu réécris le chapitre en corrigeant CHAQUE point critiqué. Tu ne te contentes pas de retouches cosmétiques.`;\n\nconst prompt = `CONTEXTE DU LIVRE :\nThèse centrale : ${d.meta.these_centrale}\nTon : ${d.meta.ton}\nPublic : ${d.meta.public_cible}\nInterdits : ${d.meta.interdits.join(\", \")}\nTerminologie : ${JSON.stringify(d.terminologie, null, 2)}\n\nRÉSUMÉS DES CHAPITRES PRÉCÉDENTS :\n${d.resumes_precedents}\n\nPLAN DU CHAPITRE À RÉDIGER :\nNuméro : ${d.chapitre.numero}\nTitre : ${d.chapitre.titre}\nObjectif : ${d.chapitre.objectif}\nPoints clés à couvrir :\n${d.chapitre.points_cles.map((p, i) => `${i + 1}. ${p}`).join(\"\\n\")}\n\n${d.critiques_eventuelles ? \"CRITIQUES À CORRIGER (mode reprise) :\\n\" + d.critiques_eventuelles + \"\\n\\n\" : \"\"}Rédige le chapitre.`;\n\nreturn [{ json: {\n  model: \"gemma4:e4b\",\n  system,\n  prompt,\n  stream: false,\n  options: { temperature: 0.8, num_ctx: 16384 }\n} }];"
+      },
+      "id": "bf6631ae-d614-4b52-9109-c3e19f4c587a",
+      "name": "Préparer requête Rédacteur",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "887c6fec-a434-4d24-a89c-42a7bdc93f7b",
+      "name": "Ollama — RÉDACTEUR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        304,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== CONSTRUCTION DU BODY POUR LE CRITIQUE (mistral:7b, format json) =====\nconst texteChapitre = $json.response; // sortie Ollama du Rédacteur\nconst d = $('Données de test').first().json;\n\nconst system = `Tu es un critique littéraire et éditorial impitoyable mais juste. Tu évalues UN chapitre contre son plan.\n\nRÈGLES ABSOLUES :\n1. Tu réponds UNIQUEMENT avec un objet JSON valide conforme au schéma. Aucun texte hors JSON.\n2. Tu notes chaque axe de 1 à 10. Un 8+ signifie \"publiable tel quel sur cet axe\". Sois sévère : la moyenne attendue d'un premier jet est 6.\n3. Pour \"passages_faibles\", tu cites EXACTEMENT 3 extraits textuels (10-30 mots chacun, copiés verbatim du chapitre) avec la raison de leur faiblesse. C'est obligatoire même si le chapitre est bon.\n4. \"couverture_plan\" : tu listes chaque point_cle du plan avec true/false selon qu'il est réellement traité (pas juste mentionné).\n5. Tu ne proposes PAS de réécriture. Tu diagnostiques, c'est tout.\n6. Tu évalues en français.\n\nSCHÉMA :\n{\n  \"scores\": {\"clarte\": int, \"tenue_objectif\": int, \"non_redondance\": int, \"respect_ton\": int, \"densite_valeur\": int},\n  \"couverture_plan\": [{\"point_cle\": string, \"couvert\": boolean}],\n  \"passages_faibles\": [{\"extrait\": string, \"probleme\": string}],\n  \"verdict_une_phrase\": string\n}`;\n\nconst prompt = `PLAN DU CHAPITRE :\nObjectif : ${d.chapitre.objectif}\nPoints clés attendus :\n${d.chapitre.points_cles.map((p, i) => `${i + 1}. ${p}`).join(\"\\n\")}\nTon attendu : ${d.meta.ton}\n\nRÉSUMÉS DES CHAPITRES PRÉCÉDENTS (pour juger la redondance) :\n${d.resumes_precedents}\n\nCHAPITRE À ÉVALUER :\n${texteChapitre}\n\nÉvalue.`;\n\nreturn [{ json: {\n  model: \"deepseek-r1:7b\",\n  system,\n  prompt,\n  stream: false,\n  format: \"json\",\n  options: { temperature: 0.2, num_ctx: 16384 },\n  _texte_chapitre: texteChapitre\n} }];"
+      },
+      "id": "0d71bd12-91c8-440f-86de-856aec52c594",
+      "name": "Préparer requête Critique",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model: $json.model, system: $json.system, prompt: $json.prompt, stream: $json.stream, format: $json.format, options: $json.options}) }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "4cc2fdc1-06bc-459a-bad4-30684199dd2e",
+      "name": "Ollama — CRITIQUE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        736,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== GATE DÉTERMINISTE v2 — blindé pour modèles de raisonnement =====\nlet brut = $json.response || \"\";\n\n// 1. Retirer les blocs de réflexion de deepseek-r1\nbrut = brut.replace(/<think>[\\s\\S]*?<\\/think>/g, \"\").trim();\n\n// 2. Extraire le premier objet JSON complet trouvé dans le texte\nlet evaluation = null;\nconst debut = brut.indexOf(\"{\");\nconst fin = brut.lastIndexOf(\"}\");\nif (debut !== -1 && fin > debut) {\n  try {\n    evaluation = JSON.parse(brut.substring(debut, fin + 1));\n  } catch (e) { /* on gère plus bas */ }\n}\n\n// 3. Vérifier que le schéma attendu est présent\nconst schemaOK = evaluation\n  && evaluation.scores\n  && typeof evaluation.scores === \"object\"\n  && Object.keys(evaluation.scores).length >= 3;\n\nif (!schemaOK) {\n  return [{ json: {\n    decision: \"erreur_schema_critique\",\n    message: \"Le Critique n'a pas produit le JSON attendu (champ 'scores' absent ou invalide). Voir sortie brute ci-dessous.\",\n    sortie_brute: brut.substring(0, 2000)\n  } }];\n}\n\n// 4. Logique de validation (inchangée)\nconst iteration = $('Données de test').first().json.iteration || 1;\nconst texteChapitre = $('Préparer requête Critique').first().json._texte_chapitre;\n\nconst scores = Object.values(evaluation.scores).filter(v => typeof v === \"number\");\nconst moyenne = Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10;\nconst minScore = Math.min(...scores);\nconst planComplet = (evaluation.couverture_plan || []).every(p => p.couvert);\n\n// 5. Contrôles déterministes supplémentaires (les règles vérifiables par code)\nconst nbMots = texteChapitre.split(/\\s+/).length;\nconst nbPuces = (texteChapitre.match(/^\\s*[\\*\\-]\\s+/gm) || []).length;\nconst anneesSuspectes = texteChapitre.match(/\\b20(1[0-9]|2[0-4])\\b/g) || [];\nconst alertes = [];\nif (nbMots < 1500 || nbMots > 2600) alertes.push(`Longueur hors cible : ${nbMots} mots`);\nif (nbPuces > 8) alertes.push(`Trop de puces : ${nbPuces} lignes`);\nif (anneesSuspectes.length) alertes.push(`Années à vérifier : ${[...new Set(anneesSuspectes)].join(\", \")}`);\n\nconst VALIDE = moyenne >= 8.5 && minScore >= 5 && planComplet;\nconst MAX_ITERATIONS = 2;\n\nif (VALIDE || iteration >= MAX_ITERATIONS) {\n  return [{ json: {\n    decision: VALIDE ? \"valide\" : \"valide_avec_reserves\",\n    moyenne, min_score: minScore, plan_complet: planComplet, iteration,\n    nb_mots: nbMots, alertes,\n    verdict: evaluation.verdict_une_phrase || \"\",\n    reserves: VALIDE ? [] : (evaluation.passages_faibles || []),\n    texte_chapitre: texteChapitre\n  } }];\n} else {\n  const critiques = [\n    `Verdict : ${evaluation.verdict_une_phrase || \"\"}`,\n    ...(evaluation.couverture_plan || []).filter(p => !p.couvert).map(p => `Point non traité : ${p.point_cle}`),\n    ...(evaluation.passages_faibles || []).map(p => `Passage faible : \"${p.extrait}\" → ${p.probleme}`),\n    ...alertes.map(a => `Contrôle automatique : ${a}`)\n  ].join(\"\\n\");\n\n  return [{ json: {\n    decision: \"reprise\", moyenne, min_score: minScore, plan_complet: planComplet,\n    iteration: iteration + 1, nb_mots: nbMots, alertes, critiques,\n    texte_chapitre: texteChapitre\n  } }];\n}"
+      },
+      "id": "f7b70840-3cbb-4937-92c3-3c70c57a5d78",
+      "name": "GATE (validation déterministe)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        -192
+      ]
+    }
+  ],
+  "connections": {
+    "Démarrage manuel": {
+      "main": [
+        [
+          {
+            "node": "Données de test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Données de test": {
+      "main": [
+        [
+          {
+            "node": "Préparer requête Rédacteur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer requête Rédacteur": {
+      "main": [
+        [
+          {
+            "node": "Ollama — RÉDACTEUR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama — RÉDACTEUR": {
+      "main": [
+        [
+          {
+            "node": "Préparer requête Critique",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer requête Critique": {
+      "main": [
+        [
+          {
+            "node": "Ollama — CRITIQUE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama — CRITIQUE": {
+      "main": [
+        [
+          {
+            "node": "GATE (validation déterministe)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "active": false
+}

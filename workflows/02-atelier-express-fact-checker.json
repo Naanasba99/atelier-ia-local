@@ -1,0 +1,518 @@
+{
+  "id": "88ccIy5TWBBJBYSQ",
+  "name": "Atelier Express — avec Fact-Checker (corrigé)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "7076bacd-6e85-4d93-9ec4-b60dd2ffb5ff",
+      "name": "Démarrage manuel",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1456,
+        -1008
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ================= TA DEMANDE : ÉCRIS ICI =================\n// Écris ta demande en langage naturel, comme tu me parlerais.\n// ===========================================================\n\nconst demande = `Un article de blog de 1000 à 1300 mots racontant comment j'ai construit un atelier d'écriture IA entièrement local sur mon Mac, et ce que cette expérience m'a appris.\n\nLes faits à utiliser (n'invente rien d'autre) :\n- L'atelier tourne à 100% en local : n8n dans Docker, modèles IA via Ollama, sur un Mac avec 16 Go de RAM\n- La chaîne de production : un Interprète transforme ma demande libre en cahier des charges, un Rédacteur écrit, un Critique évalue, un garde-fou en code déterministe (le GATE) valide ou renvoie en réécriture, un Éditeur aligne le style sur un échantillon de ma propre prose\n- Une boucle de reprise automatique : si le texte est jugé faible, il est réécrit sans intervention humaine, maximum 2 itérations\n- Un Fact-Checker vérifie chaque affirmation factuelle contre un corpus de mes propres briefs validés, indexés dans une base vectorielle locale\n- La leçon centrale vécue : un brief vague produit de l'invention plausible, un brief riche en faits produit un texte fidèle - la qualité vient du brief plus que du modèle\n- Leçon secondaire : les notes des juges IA mesurent la forme, jamais la vérité - seuls les contrôles en code pur et la relecture humaine garantissent les faits\n- Limites honnêtes : qualité de plume inférieure aux grands modèles du marché, 5 à 15 minutes par texte, et une relecture humaine de 5 minutes reste indispensable avant publication\n\nTon : apprenant curieux qui raconte son cheminement avec ses erreurs, pas expert qui donne des leçons. Première personne. Pas de jargon marketing, pas d'emojis, pas de promesses du type \"révolutionnez votre productivité\".\nStructure : une accroche narrative, le récit du projet, les deux leçons, les limites, et une question ouverte finale aux lecteurs sur ce qu'ils délégueraient - ou pas - à une machine qui écrit.`;\n\n// OPTIONNEL : colle ta prose entre les backticks ci-dessous (sinon laisse tel quel)\n\nconst echantillon_style = `(aucun échantillon) COLLE ICI 2 À 3 PAGES DE TA PROPRE PROSE à la place de cette phrase. L'Éditeur imitera ce style. Tant que cette phrase est là, l'Éditeur se contente de fluidifier le texte.`;\n\n// Note : le début du récit apparaissait en double dans l'ancienne version — corrigé.\n\nreturn [{ json: { demande, echantillon_style } }];\n"
+      },
+      "id": "154c59c8-d24a-4561-bec3-57c8b500d926",
+      "name": "TA DEMANDE (écris ici)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1248,
+        -1008
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== BODY POUR L'INTERPRÈTE (gemma4:e4b, JSON forcé) =====\nconst demande = $json.demande;\n\nconst system = `Tu es interprète éditorial. Tu transformes une demande libre en cahier des charges structuré pour un rédacteur.\n\nRÈGLES ABSOLUES :\n1. Tu réponds UNIQUEMENT avec un objet JSON valide conforme au schéma. Aucun texte hors JSON.\n2. Tu déduis le type de texte demandé et ses conventions. Longueurs par défaut si non précisées par la demande :\n   - post LinkedIn ou réseau social : 150 à 400 mots\n   - paragraphe ou introduction : 80 à 250 mots\n   - email : 100 à 300 mots\n   - article de blog : 800 à 1500 mots\n   - article de fond ou chapitre : 1500 à 2500 mots\n   Si la demande précise une longueur, elle prime.\n3. format_notes décrit les conventions du format : par exemple pour un post LinkedIn « accroche forte en première ligne, paragraphes de 1-2 phrases, pas de titres markdown, pas de puces » ; pour un article « titre ##, sous-titres ###, prose dominante ».\n4. points_cles : 3 à 6 idées concrètes que le texte doit couvrir, déduites de la demande.\n5. Si la demande précise un ton, reprends-le. Sinon déduis le ton le plus adapté.\n6. Tout en français.\n\nSCHÉMA :\n{\n  \\\"type_texte\\\": string,\n  \\\"sujet\\\": string,\n  \\\"objectif\\\": string,\n  \\\"points_cles\\\": [string],\n  \\\"ton\\\": string,\n  \\\"longueur_mots_min\\\": int,\n  \\\"longueur_mots_max\\\": int,\n  \\\"format_notes\\\": string\n}`;\n\nconst prompt = `DEMANDE DE L'AUTEUR :\\n${demande}\\n\\nProduis le cahier des charges JSON.`;\n\nreturn [{ json: {\n  model: \"gemma4:e4b\",\n  system,\n  prompt,\n  stream: false,\n  format: \"json\",\n  options: { temperature: 0.3, num_ctx: 8192 }\n} }];"
+      },
+      "id": "6b98c9ae-5802-41d6-a2bb-43c06bf4f8d6",
+      "name": "Préparer requête Interprète",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1056,
+        -1008
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "e8c6368a-0eb2-435b-99cc-ffbb46ca6cfb",
+      "name": "Ollama — INTERPRÈTE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -848,
+        -1008
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== PARSER LE CAHIER DES CHARGES =====\nlet brut = ($json.response || \"\").replace(/<think>[\\s\\S]*?<\\/think>/g, \"\").trim();\nconst d = brut.indexOf(\"{\");\nconst f = brut.lastIndexOf(\"}\");\nif (d === -1 || f <= d) {\n  throw new Error(\"L'Interprète n'a pas produit de JSON. Début : \" + brut.substring(0, 300));\n}\nconst spec = JSON.parse(brut.substring(d, f + 1));\nif (!spec.points_cles || !spec.points_cles.length) {\n  throw new Error(\"Cahier des charges sans points_cles.\");\n}\nspec.longueur_mots_min = spec.longueur_mots_min || 150;\nspec.longueur_mots_max = spec.longueur_mots_max || 800;\nspec.ton = spec.ton || \"clair et direct\";\nspec.format_notes = spec.format_notes || \"prose fluide\";\n\nconst mem = $getWorkflowStaticData('global');\nmem.spec = spec;\n\nreturn [{ json: { spec, iteration: 1, critiques_eventuelles: \"\" } }];"
+      },
+      "id": "e592f503-c0ea-4075-83a3-3743bdaf2caa",
+      "name": "Parser la commande",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        -1008
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== BODY POUR LE RÉDACTEUR (gemma4:e4b) — tout type de texte =====\nconst mem = $getWorkflowStaticData('global');\nconst spec = mem.spec;\nconst iteration = $json.iteration || 1;\nconst critiques = $json.critiques_eventuelles || \"\";\n\nconst system = `Tu es rédacteur professionnel polyvalent. Tu produis UN texte, en français, conforme à un cahier des charges strict.\n\nRÈGLES ABSOLUES :\n1. Ta réponse est UNIQUEMENT le texte demandé. Aucune phrase d'introduction (« Voici le texte »), aucun commentaire, aucune méta-explication. Tu commences directement par le contenu.\n2. Tu respectes le TYPE de texte et ses conventions décrites dans format_notes. Un post LinkedIn n'est pas un article : pas de titres markdown si le format ne s'y prête pas.\n3. Tu couvres TOUS les points clés du cahier des charges, sans en ajouter d'autres.\n4. Tu respectes le ton demandé et la fourchette de longueur en mots. C'est impératif.\n5. Chaque affirmation chiffrée ou factuelle précise est marquée [VERIF] juste après.\n6. Tu écris uniquement en français : aucun mot ou caractère d'une autre langue.\n7. SI des critiques te sont fournies (mode reprise) : tu réécris le texte en corrigeant CHAQUE point critiqué, sans retouches cosmétiques, et tu gardes un marqueur [VERIF] après chaque affirmation factuelle.\n8. Tu n'ajoutes AUCUN nom d'outil, de modèle, de marque, de personne ni aucun chiffre qui ne figure pas dans le cahier des charges.`;\n\nconst prompt = `CAHIER DES CHARGES :\\nType de texte : ${spec.type_texte}\\nSujet : ${spec.sujet}\\nObjectif : ${spec.objectif}\\nTon : ${spec.ton}\\nLongueur : entre ${spec.longueur_mots_min} et ${spec.longueur_mots_max} mots\\nConventions de format : ${spec.format_notes}\\nPoints clés à couvrir :\\n${spec.points_cles.map((p, i) => (i + 1) + \". \" + p).join(\"\\n\")}\\n\\n${critiques ? \"CRITIQUES À CORRIGER (mode reprise) :\\n\" + critiques + \"\\n\\n\" : \"\"}Rédige le texte.`;\n\nreturn [{ json: {\n  model: \"gemma4:e4b\",\n  system,\n  prompt,\n  stream: false,\n  options: { temperature: 0.8, num_ctx: 16384 },\n  _iteration: iteration\n} }];"
+      },
+      "id": "85156315-4a58-4ae5-925f-91534521a7ee",
+      "name": "Préparer requête Rédacteur",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -464,
+        -1008
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model: $json.model, system: $json.system, prompt: $json.prompt, stream: $json.stream, options: $json.options}) }}",
+        "options": {
+          "timeout": 900000
+        }
+      },
+      "id": "6d55c326-918f-477c-a31c-e0a8ac4502b8",
+      "name": "Ollama — RÉDACTEUR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -272,
+        -1008
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== BODY POUR LE CRITIQUE (qwen2.5:7b, schéma JSON imposé par Ollama) =====\n// deepseek-r1 remplacé le 24/09/2026 : il sortait parfois les notes hors de « scores ».\n// (Node restauré : il avait été supprimé par accident)\nconst texte = $json.response;\nconst mem = $getWorkflowStaticData('global');\nconst spec = mem.spec;\n\nconst system = `Tu es un critique éditorial impitoyable mais juste. Tu évalues UN texte contre son cahier des charges.\n\nRÈGLES ABSOLUES :\n1. Tu réponds UNIQUEMENT avec un objet JSON valide conforme au schéma. Aucun texte hors JSON.\n2. Tu notes chaque axe de 1 à 10. Un 8+ signifie « publiable tel quel sur cet axe ». Sois sévère : la moyenne attendue d'un premier jet est 6.\n3. Pour passages_faibles, tu cites EXACTEMENT 3 extraits textuels (10-30 mots, copiés mot pour mot du texte) avec la raison précise de leur faiblesse. Obligatoire même si le texte est bon.\n4. couverture_plan : chaque point clé du cahier des charges avec true/false selon qu'il est réellement traité.\n5. respect_format : juge si le texte respecte les conventions du type demandé (un post LinkedIn avec des titres markdown = mauvais score).\n6. Tu ne proposes PAS de réécriture. Tu diagnostiques.\n7. Tu écris uniquement en français.\n\nSCHÉMA :\n{\n  \\\"scores\\\": {\\\"clarte\\\": int, \\\"tenue_objectif\\\": int, \\\"respect_format\\\": int, \\\"respect_ton\\\": int, \\\"densite_valeur\\\": int},\n  \\\"couverture_plan\\\": [{\\\"point_cle\\\": string, \\\"couvert\\\": boolean}],\n  \\\"passages_faibles\\\": [{\\\"extrait\\\": string, \\\"probleme\\\": string}],\n  \\\"verdict_une_phrase\\\": string\n}`;\n\nconst prompt = `CAHIER DES CHARGES :\\nType : ${spec.type_texte}\\nObjectif : ${spec.objectif}\\nTon attendu : ${spec.ton}\\nFormat attendu : ${spec.format_notes}\\nLongueur attendue : ${spec.longueur_mots_min}-${spec.longueur_mots_max} mots\\nPoints clés attendus :\\n${spec.points_cles.map((p, i) => (i + 1) + \". \" + p).join(\"\\n\")}\\n\\nTEXTE À ÉVALUER :\\n${texte}\\n\\nÉvalue.`;\n\nconst axe = { type: \"integer\", minimum: 1, maximum: 10 };\nconst format = {\n  type: \"object\",\n  properties: {\n    scores: {\n      type: \"object\",\n      properties: { clarte: axe, tenue_objectif: axe, respect_format: axe, respect_ton: axe, densite_valeur: axe },\n      required: [\"clarte\", \"tenue_objectif\", \"respect_format\", \"respect_ton\", \"densite_valeur\"]\n    },\n    couverture_plan: { type: \"array\", items: { type: \"object\",\n      properties: { point_cle: { type: \"string\" }, couvert: { type: \"boolean\" } }, required: [\"point_cle\", \"couvert\"] } },\n    passages_faibles: { type: \"array\", items: { type: \"object\",\n      properties: { extrait: { type: \"string\" }, probleme: { type: \"string\" } }, required: [\"extrait\", \"probleme\"] } },\n    verdict_une_phrase: { type: \"string\" }\n  },\n  required: [\"scores\", \"couverture_plan\", \"passages_faibles\", \"verdict_une_phrase\"]\n};\n\nreturn [{ json: {\n  model: \"qwen2.5:7b\",\n  system,\n  prompt,\n  stream: false,\n  format,\n  options: { temperature: 0.2, num_ctx: 16384, num_predict: 1500 },\n  _texte: texte\n} }];"
+      },
+      "id": "bc990cd8-e8bc-4acb-a24c-76ee4dfc1254",
+      "name": "Préparer requête Critique",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        -1008
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model: $json.model, system: $json.system, prompt: $json.prompt, stream: $json.stream, format: $json.format, options: $json.options}) }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "39f67935-38b7-4e13-947e-f40b6182713b",
+      "name": "Ollama — CRITIQUE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        112,
+        -1008
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== GATE DÉTERMINISTE — adapté au cahier des charges =====\nlet brut = ($json.response || \"\").replace(/<think>[\\s\\S]*?<\\/think>/g, \"\").trim();\n\nlet evaluation = null;\nconst d = brut.indexOf(\"{\");\nconst f = brut.lastIndexOf(\"}\");\nif (d !== -1 && f > d) {\n  try { evaluation = JSON.parse(brut.substring(d, f + 1)); } catch (e) {}\n}\n\nconst mem = $getWorkflowStaticData('global');\nconst spec = mem.spec;\nconst iteration = $('Préparer requête Rédacteur').first().json._iteration || 1;\nconst texte = $('Préparer requête Critique').first().json._texte;\nconst MAX_ITERATIONS = 2;\n\n// Filet de sécurité : si les notes sont au premier niveau au lieu de « scores », on les récupère\nconst AXES = [\"clarte\", \"tenue_objectif\", \"respect_format\", \"respect_ton\", \"densite_valeur\"];\nconst sansAccent = k => k.normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\");\nif (evaluation && (!evaluation.scores || typeof evaluation.scores !== \"object\")) {\n  const aPlat = {};\n  for (const [k, v] of Object.entries(evaluation)) if (AXES.includes(sansAccent(k)) && typeof v === \"number\") aPlat[k] = v;\n  if (Object.keys(aPlat).length >= 3) evaluation.scores = aPlat;\n}\n\nconst schemaOK = evaluation && evaluation.scores && typeof evaluation.scores === \"object\" && Object.keys(evaluation.scores).length >= 3;\n\nif (!schemaOK) {\n  return [{ json: {\n    decision: \"valide_avec_reserves\",\n    moyenne: null, iteration,\n    alertes: [\"Critique illisible : texte validé sans évaluation.\"],\n    verdict: \"\", reserves: [],\n    texte\n  } }];\n}\n\nconst scores = Object.values(evaluation.scores).filter(v => typeof v === \"number\");\nconst moyenne = Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10;\nconst minScore = Math.min(...scores);\nconst planComplet = (evaluation.couverture_plan || []).every(p => p.couvert);\n\nconst nbMots = texte.split(/\\s+/).length;\nconst caracteresCJK = /[\\u4e00-\\u9fff]/.test(texte);\nconst anneesSuspectes = texte.match(/\\b20(1[0-9]|2[0-4])\\b/g) || [];\nconst margeMin = Math.floor(spec.longueur_mots_min * 0.8);\nconst margeMax = Math.ceil(spec.longueur_mots_max * 1.15);\nconst alertes = [];\nif (nbMots < margeMin || nbMots > margeMax) alertes.push(\"Longueur hors cible : \" + nbMots + \" mots (attendu \" + spec.longueur_mots_min + \"-\" + spec.longueur_mots_max + \")\");\nif (anneesSuspectes.length) alertes.push(\"Années à vérifier : \" + [...new Set(anneesSuspectes)].join(\", \"));\nif (caracteresCJK) alertes.push(\"Caractères chinois détectés\");\n\nconst longueurOK = nbMots >= margeMin && nbMots <= margeMax;\nconst VALIDE = moyenne >= 8 && minScore >= 5 && planComplet && !caracteresCJK && longueurOK;\n\nif (VALIDE || iteration >= MAX_ITERATIONS) {\n  return [{ json: {\n    decision: VALIDE ? \"valide\" : \"valide_avec_reserves\",\n    moyenne, min_score: minScore, plan_complet: planComplet,\n    iteration, nb_mots: nbMots, alertes,\n    verdict: evaluation.verdict_une_phrase || \"\",\n    reserves: VALIDE ? [] : (evaluation.passages_faibles || []),\n    texte\n  } }];\n}\n\nconst critiques = [\n  \"Verdict : \" + (evaluation.verdict_une_phrase || \"\"),\n  ...(evaluation.couverture_plan || []).filter(p => !p.couvert).map(p => \"Point non traité : \" + p.point_cle),\n  ...(evaluation.passages_faibles || []).map(p => \"Passage faible : « \" + p.extrait + \" » → \" + (p.probleme || p[\"problème\"] || \"\")),\n  ...alertes.map(a => \"Contrôle automatique : \" + a)\n].join(\"\\n\");\n\nreturn [{ json: {\n  decision: \"reprise\",\n  moyenne, iteration: iteration + 1,\n  critiques_eventuelles: critiques,\n  texte\n} }];"
+      },
+      "id": "89b5615c-e758-468c-be6d-6ecdb00d717c",
+      "name": "GATE (validation déterministe)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        -1008
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "reprise",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0e60cec6-72a9-4b1a-99e3-a7365242bfe1",
+      "name": "Reprise ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        496,
+        -1008
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== FACT-CHECK v2 (24/09/2026) =====\n// Sources de vérité : les faits de TA DEMANDE + le corpus des briefs (service port 5077).\n// Affirmations vérifiées : celles marquées [VERIF] + celles repérées automatiquement (qwen2.5:7b).\n// Verdicts : confirme / contredit (→ réécriture) / absent (→ à vérifier) / opinion (ignoré).\n// Garde-fou en code pur : un nom propre ou un chiffre absent des sources => « absent » (à vérifier).\nconst texte = $json.texte || $json.texte_chapitre || \"\";\nconst iteration = $json.iteration || 1;\nconst OLLAMA = \"http://host.docker.internal:11434/api/generate\";\n\nif (!texte) {\n  return [{ json: {\n    ...$json,\n    factcheck: { erreur: \"Aucun texte reçu — vérifier que FACT-CHECK est branché sur la sortie false de « Reprise ? »\" }\n  } }];\n}\n\nconst demande = $('TA DEMANDE (écris ici)').first().json.demande || \"\";\nconst norm = s => String(s || \"\").replace(/\\[VERIF\\]/g, \" \").replace(/[’‘`]/g, \"'\").replace(/[«»“”]/g, '\"')\n  .replace(/[*_]/g, \"\").replace(/\\s+/g, \" \").trim().toLowerCase();\nconst texteNorm = norm(texte);\n\n// 1. Affirmations marquées [VERIF] par le Rédacteur\nconst phrases = texte.split(/(?<=[.!?])\\s+/);\nconst claims = phrases\n  .filter(p => p.includes(\"[VERIF]\"))\n  .map(p => p.replace(/\\s*\\[VERIF\\]\\s*/g, \" \").replace(/\\s+/g, \" \").trim())\n  .filter(p => p.length > 15);\n\n// 2. Affirmations repérées automatiquement (le Rédacteur oublie souvent les [VERIF])\nlet extraction = \"ok\";\ntry {\n  const ex = await this.helpers.httpRequest({\n    method: \"POST\", url: OLLAMA, json: true, timeout: 300000,\n    body: {\n      model: \"qwen2.5:7b\", stream: false,\n      system: \"Tu repères dans un texte les affirmations FACTUELLES vérifiables : chiffres, durées, quantités, noms d'outils, de modèles ou de technologies, descriptions de fonctionnement, faits historiques. Tu ignores les opinions, émotions, questions et formules de style. Tu COPIES chaque phrase mot pour mot depuis le texte, sans la modifier. Maximum 8.\",\n      prompt: \"TEXTE :\\n\" + texte,\n      format: { type: \"object\", properties: { affirmations: { type: \"array\", items: { type: \"string\" } } }, required: [\"affirmations\"] },\n      options: { temperature: 0, num_ctx: 16384, num_predict: 1200 }\n    }\n  });\n  const trouvees = JSON.parse(ex.response || \"{}\").affirmations || [];\n  for (const c of trouvees) {\n    const propre = String(c).replace(/\\s*\\[VERIF\\]\\s*/g, \" \").replace(/\\s+/g, \" \").trim();\n    // on ne garde que les phrases réellement présentes dans le texte (pas de reformulation)\n    if (propre.length > 15 && texteNorm.includes(norm(propre)) && !claims.some(x => norm(x) === norm(propre))) claims.push(propre);\n  }\n} catch (e) { extraction = \"échec : \" + e.message; }\n\nif (claims.length === 0) {\n  return [{ json: { ...$json, factcheck: { verdicts: [], contredits: 0, absents: 0, note: \"aucune affirmation factuelle repérée\", extraction } } }];\n}\n\n// Garde-fou déterministe : noms propres et chiffres doivent exister dans les sources\nconst detailsNonSources = (claim, sources) => {\n  const s = norm(sources);\n  const mots = claim.replace(/\\[VERIF\\]/g, \" \").split(/\\s+/);\n  const details = new Set();\n  mots.forEach((m, i) => {\n    const propre = m.replace(/^[^\\p{L}\\p{N}]+|[^\\p{L}\\p{N}]+$/gu, \"\");\n    if (!propre) return;\n    const debutPhrase = i === 0 || /[.!?:]$/.test(mots[i - 1]);\n    if (/\\d/.test(propre) || (!debutPhrase && /^\\p{Lu}/u.test(propre) && propre.length > 1)) details.add(propre);\n  });\n  return [...details].filter(d => !s.includes(d.toLowerCase()));\n};\n\n// Dédoublonnage : on écarte une affirmation déjà contenue dans une autre\nconst uniques = claims.filter((c, i) => !claims.some((o, j) => j !== i && norm(o).includes(norm(c)) && (norm(o) !== norm(c) || j < i)));\n\nconst verdicts = [];\nfor (const claim of uniques.slice(0, 12)) {\n  let passagesTxt = \"(aucun passage trouvé)\";\n  let serviceOK = true;\n  try {\n    const retr = await this.helpers.httpRequest({\n      method: \"POST\", url: \"http://host.docker.internal:5077/verify\",\n      body: { claim }, json: true, timeout: 60000\n    });\n    passagesTxt = (retr.passages || [])\n      .map(p => \"- (\" + p.source + \", dist \" + p.distance + \") \" + p.texte)\n      .join(\"\\n\") || \"(aucun passage trouvé)\";\n  } catch (e) {\n    serviceOK = false;\n    passagesTxt = \"(service de corpus injoignable — seuls les faits de la demande sont disponibles)\";\n  }\n\n  let v = { verdict: \"absent\", justification: \"jugement illisible\" };\n  try {\n    const judge = await this.helpers.httpRequest({\n      method: \"POST\", url: OLLAMA, json: true, timeout: 180000,\n      body: {\n        model: \"qwen2.5:7b\", stream: false,\n        system: \"Tu es vérificateur de faits. Tu compares UNE affirmation aux sources de l'auteur (ses faits fournis + passages de son corpus).\\nProcédure : 1) Identifie le fait précis que l'affirmation avance. 2) Cherche dans les sources une phrase qui dit la même chose. 3) Écris ta justification en citant cette phrase, PUIS donne le verdict.\\nVerdicts :\\n- \\\"confirme\\\" : une source dit la même chose, même avec d'autres mots (ex. « 16 Go de mémoire vive » = « 16 Go de RAM » ; « 100% local » = « pas de cloud »).\\n- \\\"contredit\\\" : une source dit le contraire sur un point précis (autre nombre, négation, autre comparaison).\\n- \\\"absent\\\" : l'affirmation avance un fait précis (date, durée, chiffre, nom, comparaison) qu'aucune source ne contient.\\n- \\\"opinion\\\" : ressenti, jugement ou image littéraire, sans fait vérifiable.\",\n        prompt: \"AFFIRMATION :\\n\" + claim + \"\\n\\nFAITS FOURNIS PAR L'AUTEUR :\\n\" + demande + \"\\n\\nPASSAGES DU CORPUS :\\n\" + passagesTxt,\n        format: { type: \"object\", properties: {\n          justification: { type: \"string\" },\n          verdict: { type: \"string\", enum: [\"confirme\", \"contredit\", \"absent\", \"opinion\"] } }, required: [\"justification\", \"verdict\"] },\n        options: { temperature: 0, num_ctx: 8192, num_predict: 400 }\n      }\n    });\n    v = JSON.parse(judge.response || \"{}\");\n  } catch (e) {}\n\n  const manquants = detailsNonSources(claim, demande + \"\\n\" + passagesTxt);\n  let verdict = v.verdict || \"absent\";\n  let justification = v.justification || \"\";\n  const aDesDetails = detailsNonSources(claim, \"\").length > 0; // contient au moins un nom propre ou un chiffre\n  if (verdict === \"contredit\" && !aDesDetails) {\n    // pas d'élément précis à contredire : on ne relance pas une réécriture pour ça\n    verdict = \"absent\";\n    justification = \"Contradiction non étayée par un élément précis — à relire. (Le juge IA disait : \" + justification + \")\";\n  }\n  if (verdict === \"confirme\" && manquants.length) {\n    verdict = \"absent\";\n    justification = \"Détails introuvables dans la demande et les briefs : \" + manquants.join(\", \") + \". (Le juge IA disait : \" + justification + \")\";\n  }\n  verdicts.push({ claim, verdict, justification, ...(serviceOK ? {} : { note: \"corpus injoignable\" }) });\n}\n\nconst contredits = verdicts.filter(x => x.verdict === \"contredit\");\nconst absents = verdicts.filter(x => x.verdict === \"absent\");\nconst opinions = verdicts.filter(x => x.verdict === \"opinion\");\n\nif (contredits.length > 0 && iteration < 2) {\n  const critiques = contredits\n    .map(c => \"Fait CONTREDIT par tes sources : « \" + c.claim + \" » → \" + c.justification + \". Corrige ou supprime cette affirmation.\")\n    .join(\"\\n\");\n  return [{ json: {\n    decision: \"reprise_factcheck\",\n    iteration: iteration + 1,\n    critiques_eventuelles: critiques,\n    texte,\n    factcheck: { verdicts, contredits: contredits.length, absents: absents.length }\n  } }];\n}\n\nreturn [{ json: {\n  ...$json,\n  factcheck: {\n    verdicts,\n    confirmes: verdicts.length - contredits.length - absents.length - opinions.length,\n    opinions: opinions.length,\n    contredits: contredits.length,\n    absents: absents.length,\n    a_verifier_manuellement: absents.map(a => a.claim + \"  →  \" + a.justification),\n    extraction\n  }\n} }];\n"
+      },
+      "id": "30790f22-2bed-436d-b701-fdf8ce1774ea",
+      "name": "FACT-CHECK",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        -1008
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "reprise_factcheck",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6c5c90c9-a6b8-49f1-ab5c-65ee8671ebcd",
+      "name": "Reprise fact-check ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        896,
+        -1008
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== BODY POUR L'ÉDITEUR (gemma4:e4b) =====\nconst texte = $json.texte;\nconst echantillon = $('TA DEMANDE (écris ici)').first().json.echantillon_style || \"\";\nconst avecStyle = echantillon.length > 200 && !echantillon.includes(\"aucun échantillon\");\n\nconst reglesStyle = avecStyle\n  ? `3. La FORME s'aligne sur l'ÉCHANTILLON DE RÉFÉRENCE fourni : longueur des phrases, rythme, niveau de langue, façon d'ouvrir et fermer les paragraphes.`\n  : `3. La FORME vise la fluidité maximale : phrases variées, rythme naturel, aucune lourdeur.`;\n\nconst system = `Tu es éditeur littéraire. Tu réécris un texte pour le polir, sans changer le fond.\n\nRÈGLES ABSOLUES :\n1. Ta réponse est UNIQUEMENT le texte réécrit. Aucun commentaire.\n2. Le FOND est intouchable : mêmes idées, même ordre, mêmes faits, marqueurs [VERIF] conservés à l'identique. Le TYPE et le FORMAT du texte sont conservés (un post reste un post, un email reste un email).\n${reglesStyle}\n4. Tu élimines : répétitions de mots rapprochées, passives évitables, adverbes creux, phrases de plus de 35 mots.\n5. Longueur finale : entre -10% et +5% du texte d'origine.\n6. Tu écris uniquement en français.`;\n\nconst prompt = (avecStyle ? `ÉCHANTILLON DE RÉFÉRENCE STYLISTIQUE :\\n${echantillon}\\n\\n` : \"\") + `TEXTE À POLIR :\\n${texte}\\n\\nRéécris.`;\n\nreturn [{ json: {\n  model: \"gemma4:e4b\",\n  system,\n  prompt,\n  stream: false,\n  options: { temperature: 0.5, num_ctx: 16384 }\n} }];"
+      },
+      "id": "439ce523-a386-41a8-99b0-37f17e5db037",
+      "name": "Préparer requête Éditeur",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        -896
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 900000
+        }
+      },
+      "id": "4c008597-2e42-4ded-b2e5-529d0a877e37",
+      "name": "Ollama — ÉDITEUR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        -896
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== RÉSULTAT FINAL — le texte est ici, et dans le fichier =====\nconst mem = $getWorkflowStaticData('global');\nconst spec = mem.spec;\nconst texteFinal = $json.response;\nconst infosGate = $('GATE (validation déterministe)').first().json;\n\nlet bilanFactcheck = null;\ntry { bilanFactcheck = $('FACT-CHECK').first().json.factcheck || null; } catch (e) {}\n\nconst slug = (spec.sujet || \"texte\").toLowerCase()\n  .normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\")\n  .replace(/[^a-z0-9]+/g, \"-\").replace(/^-+|-+$/g, \"\").substring(0, 40);\nconst horodatage = new Date().toISOString().slice(0, 16).replace(\"T\", \"-\").replace(\":\", \"h\");\nconst fileName = \"/home/node/sorties/\" + (spec.type_texte || \"texte\").replace(/[^a-zA-Z0-9]+/g, \"-\") + \"-\" + slug + \"-\" + horodatage + \".md\";\n\nreturn [{ json: {\n  TEXTE_FINAL: texteFinal,\n  factcheck: bilanFactcheck,\n  type: spec.type_texte,\n  sujet: spec.sujet,\n  nb_mots: texteFinal.split(/\\s+/).length,\n  qualite: { decision: infosGate.decision, moyenne: infosGate.moyenne, iterations: infosGate.iteration, alertes: infosGate.alertes || [] },\n  texte: texteFinal,\n  fileName\n} }];"
+      },
+      "id": "746a5707-f86b-494c-94a6-e8852010175f",
+      "name": "RÉSULTAT FINAL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        -896
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "texte",
+        "options": {}
+      },
+      "id": "2e2b71c6-e8fa-4bca-9207-17affe4aa296",
+      "name": "Convertir en fichier",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1664,
+        -896
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('RÉSULTAT FINAL').first().json.fileName }}",
+        "options": {}
+      },
+      "id": "3525d6bd-c165-4051-b5ad-ff63eefcf5be",
+      "name": "Écrire le fichier",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1856,
+        -896
+      ]
+    }
+  ],
+  "connections": {
+    "Démarrage manuel": {
+      "main": [
+        [
+          {
+            "node": "TA DEMANDE (écris ici)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TA DEMANDE (écris ici)": {
+      "main": [
+        [
+          {
+            "node": "Préparer requête Interprète",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer requête Interprète": {
+      "main": [
+        [
+          {
+            "node": "Ollama — INTERPRÈTE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama — INTERPRÈTE": {
+      "main": [
+        [
+          {
+            "node": "Parser la commande",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser la commande": {
+      "main": [
+        [
+          {
+            "node": "Préparer requête Rédacteur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer requête Rédacteur": {
+      "main": [
+        [
+          {
+            "node": "Ollama — RÉDACTEUR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama — RÉDACTEUR": {
+      "main": [
+        [
+          {
+            "node": "Préparer requête Critique",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer requête Critique": {
+      "main": [
+        [
+          {
+            "node": "Ollama — CRITIQUE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama — CRITIQUE": {
+      "main": [
+        [
+          {
+            "node": "GATE (validation déterministe)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GATE (validation déterministe)": {
+      "main": [
+        [
+          {
+            "node": "Reprise ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reprise ?": {
+      "main": [
+        [
+          {
+            "node": "Préparer requête Rédacteur",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "FACT-CHECK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FACT-CHECK": {
+      "main": [
+        [
+          {
+            "node": "Reprise fact-check ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reprise fact-check ?": {
+      "main": [
+        [
+          {
+            "node": "Préparer requête Rédacteur",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Préparer requête Éditeur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer requête Éditeur": {
+      "main": [
+        [
+          {
+            "node": "Ollama — ÉDITEUR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama — ÉDITEUR": {
+      "main": [
+        [
+          {
+            "node": "RÉSULTAT FINAL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RÉSULTAT FINAL": {
+      "main": [
+        [
+          {
+            "node": "Convertir en fichier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convertir en fichier": {
+      "main": [
+        [
+          {
+            "node": "Écrire le fichier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "pinData": {},
+  "active": false
+}

@@ -1,0 +1,23 @@
+# --- Données personnelles et produites : jamais dans le dépôt ---
+# tes vrais briefs + ta prose (dépôt séparé « atelier-briefs » sur Gitea)
+briefs/
+# textes générés
+sorties/*
+!sorties/.gitkeep
+# livres à résumer (droits d'auteur)
+livres/*
+!livres/.gitkeep
+
+# --- Sauvegardes n8n : elles contiennent la clé de chiffrement ---
+backup-n8n-*/
+*.sqlite
+config
+
+# --- Fact-check : environnement et base, reconstructibles ---
+factcheck/venv/
+factcheck/chroma/
+__pycache__/
+
+# --- Divers ---
+*.bak
+.DS_Store

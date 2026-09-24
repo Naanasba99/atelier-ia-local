@@ -1,0 +1,25 @@
+services:
+  n8n-atelier:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n-atelier-ecriture
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5679:5678"          # accessible uniquement depuis cette machine
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # indispensable sur Linux, sans effet sur Mac
+    environment:
+      - GENERIC_TIMEZONE=Africa/Ndjamena
+      - TZ=Africa/Ndjamena
+      - N8N_SECURE_COOKIE=false
+      - EXECUTIONS_TIMEOUT=-1
+      - N8N_PAYLOAD_SIZE_MAX=64
+      # n8n 2.x : l'accès fichiers est limité à ~/.n8n-files par défaut
+      - N8N_RESTRICT_FILE_ACCESS_TO=/home/node/briefs;/home/node/sorties;/home/node/livres
+    volumes:
+      - n8n_atelier_data:/home/node/.n8n
+      - ./sorties:/home/node/sorties
+      - ./briefs:/home/node/briefs
+      - ./livres:/home/node/livres
+
+volumes:
+  n8n_atelier_data:

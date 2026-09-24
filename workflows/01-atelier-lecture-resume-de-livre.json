@@ -1,0 +1,613 @@
+{
+  "id": "ResumeLivreLoc01",
+  "name": "Atelier Lecture — Résumé de livre (Lecteur → Fiches → Synthèse → Fichier)",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Démarrage manuel",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "id": "9916ba4f-32d0-45fe-bc5f-1017d0eb676b"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ================= TES PARAMÈTRES : ÉCRIS ICI =================\n// 1. Dépose ton livre dans le dossier  atelier-ecriture/livres/\n//    Formats acceptés : .pdf (avec texte, pas un scan), .txt, .md\n//    (.epub : le convertir d'abord en .txt, ex. avec Calibre)\n// 2. Écris son nom exact ci-dessous, puis « Execute Workflow ».\n// 3. Le résumé arrive dans  atelier-ecriture/sorties/resume-....md\n// ⚠️ Ne touche qu'au texte entre les guillemets.\n// ==============================================================\nreturn [{ json: {\n  fichier: \"candide.txt\",\n  niveau: \"detaille\",      // \"court\" (1 page) ou \"detaille\" (fiche complète + annexes)\n  consigne: \"\",            // optionnel : un angle, ex. \"insiste sur les idées de management\"\n  modele: \"gemma4:e4b\"     // modèle Ollama (gemma4:e4b = meilleur rapport qualité/vitesse testé)\n} }];"
+      },
+      "name": "PARAMÈTRES (écris ici)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "id": "bb34df5e-10b7-46a6-988d-ddbad8494e81"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "=/home/node/livres/{{ $json.fichier }}",
+        "options": {}
+      },
+      "name": "Lire le livre",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        440,
+        300
+      ],
+      "id": "846077eb-51dc-4dc7-88e3-3293ea14f897"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "eb9149f4-7bf7-43d8-aef7-ae197222097e",
+              "leftValue": "={{ $('PARAMÈTRES (écris ici)').first().json.fichier.toLowerCase().endsWith('.pdf') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "PDF ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ],
+      "id": "dffddc14-9bdd-43f7-8e20-457cbc4316f7"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "name": "Extraire texte PDF",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        880,
+        200
+      ],
+      "id": "67ddd1ea-60b7-4246-aa74-dbf8f72f85f8"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "options": {}
+      },
+      "name": "Extraire texte brut",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        880,
+        400
+      ],
+      "id": "1fa8a5e3-fb21-464a-ae5f-76d54e8974f6"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== EXTRAIRE LE TEXTE + DÉCOUPER EN MORCEAUX (~20 000 caractères) =====\nconst p = $('PARAMÈTRES (écris ici)').first().json;\nlet texte = String($json.text ?? $json.data ?? '').replace(/\\r/g, '');\n\n// Métadonnées Project Gutenberg si présentes\nlet titre = (texte.match(/^Title:\\s*(.+)$/m) || [])[1] || '';\nlet auteur = (texte.match(/^Author:\\s*(.+)$/m) || [])[1] || '';\n// Retirer l'entête et la licence Gutenberg\nconst debut = texte.search(/\\*\\*\\* ?START OF (THE|THIS) PROJECT GUTENBERG[^\\n]*\\n/i);\nif (debut !== -1) texte = texte.substring(texte.indexOf('\\n', debut) + 1);\nconst fin = texte.search(/\\*\\*\\* ?END OF (THE|THIS) PROJECT GUTENBERG/i);\nif (fin !== -1) texte = texte.substring(0, fin);\n\ntexte = texte.replace(/[ \\t]+\\n/g, '\\n').replace(/\\n{3,}/g, '\\n\\n').trim();\nif (!titre) titre = p.fichier.replace(/\\.[^.]+$/, '').replace(/[-_]+/g, ' ');\n\nif (texte.length < 500) {\n  throw new Error(\"Presque aucun texte extrait de « \" + p.fichier + \" » (\" + texte.length +\n    \" caractères). Si c'est un PDF scanné (images), il faut d'abord un OCR.\");\n}\n\nconst TAILLE = 20000;\nconst paragraphes = texte.split(/\\n\\s*\\n/);\nconst morceaux = [];\nlet courant = '';\nconst pousser = () => { if (courant.trim()) morceaux.push(courant.trim()); courant = ''; };\nfor (const para of paragraphes) {\n  if (para.length > TAILLE) {                 // paragraphe géant (PDF mal structuré)\n    pousser();\n    const phrases = para.split(/(?<=[.!?…])\\s+/);\n    for (const ph of phrases) {\n      if ((courant + ' ' + ph).length > TAILLE) pousser();\n      courant += (courant ? ' ' : '') + ph;\n    }\n    pousser();\n    continue;\n  }\n  if ((courant + '\\n\\n' + para).length > TAILLE) pousser();\n  courant += (courant ? '\\n\\n' : '') + para;\n}\npousser();\n\nreturn morceaux.map((m, i) => ({ json: {\n  numero: i + 1, total: morceaux.length, texte: m,\n  titre: titre.trim(), auteur: auteur.trim(), nb_caracteres: texte.length\n} }));"
+      },
+      "name": "Découper en morceaux",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "id": "912ba935-e700-423a-83e7-7e5e26095162"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== BODY POUR LE LECTEUR (une fiche par morceau, JSON forcé) =====\nconst p = $('PARAMÈTRES (écris ici)').first().json;\n\nconst system = `Tu es un lecteur analyste. Tu lis UN extrait d'un livre et tu en fais une fiche de lecture fidèle, en français (même si l'extrait est dans une autre langue).\n\nRÈGLES ABSOLUES :\n1. Tu réponds UNIQUEMENT avec un objet JSON valide conforme au schéma. Aucun texte hors JSON.\n2. Tu n'utilises QUE ce qui est écrit dans l'extrait. Aucune connaissance extérieure, aucune supposition sur la suite du livre.\n3. Le résumé raconte ce qui SE PASSE ou ce qui est ARGUMENTÉ dans l'extrait, dans l'ordre, avec les noms propres exacts.\n4. Les citations sont COPIÉES MOT POUR MOT depuis l'extrait (même ponctuation). Elles seront vérifiées automatiquement : une citation reformulée sera rejetée.\n5. Si l'extrait n'est qu'une table des matières, une préface technique ou une page de garde, dis-le simplement dans le résumé.\n\nSCHÉMA :\n{\n  \"resume\": \"150 à 250 mots\",\n  \"idees_cles\": [\"2 à 5 idées ou événements majeurs\"],\n  \"personnages_ou_acteurs\": [\"noms propres importants dans l'extrait\"],\n  \"citations\": [\"1 à 3 phrases marquantes, copiées à l'identique\"]\n}`;\n\nconst prompt = `LIVRE : ${$json.titre}${$json.auteur ? ' — ' + $json.auteur : ''}\nEXTRAIT ${$json.numero} sur ${$json.total}${p.consigne ? '\\nANGLE DEMANDÉ : ' + p.consigne : ''}\n\n----- DÉBUT DE L'EXTRAIT -----\n${$json.texte}\n----- FIN DE L'EXTRAIT -----`;\n\nreturn { json: {\n  model: p.modele, system, prompt, stream: false, format: 'json',\n  options: { num_ctx: 16384, temperature: 0.2 }\n} };",
+        "mode": "runOnceForEachItem"
+      },
+      "name": "Préparer requête Lecteur",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        300
+      ],
+      "id": "de42e4db-8d58-48aa-a026-c7d9e963963a"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "name": "Boucle lecture",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1540,
+        300
+      ],
+      "id": "d85c520d-c5ef-477b-9052-536bf1b0d720"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model: $json.model, system: $json.system, prompt: $json.prompt, stream: false, options: $json.options, format: $json.format}) }}",
+        "options": {
+          "timeout": 900000
+        }
+      },
+      "name": "Ollama — LECTEUR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        480
+      ],
+      "id": "6fba23d2-0041-4b27-9aff-dabd5ffff570",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== COLLECTER LES FICHES + VÉRIFIER LES CITATIONS MOT POUR MOT =====\nconst morceaux = $('Découper en morceaux').all().map(i => i.json);\nconst reponses = $input.all().map(i => i.json);\n\nconst norm = s => String(s || '')\n  .replace(/[’‘`]/g, \"'\").replace(/[«»“”]/g, '\"')\n  .replace(/\\s+/g, ' ').trim().toLowerCase();\n\nconst fiches = [];\nconst alertes = [];\nlet citRejetees = 0;\n\nreponses.forEach((r, i) => {\n  const m = morceaux[i];\n  let brut = String(r.response || '').replace(/<think>[\\s\\S]*?<\\/think>/g, '').trim();\n  let f = null;\n  const d = brut.indexOf('{'), fin = brut.lastIndexOf('}');\n  if (d !== -1 && fin > d) { try { f = JSON.parse(brut.substring(d, fin + 1)); } catch (e) {} }\n  if (!f || !f.resume) {\n    alertes.push(`Partie ${m.numero} : fiche illisible (JSON invalide), partie ignorée.`);\n    return;\n  }\n  const source = norm(m.texte);\n  const citations = (f.citations || []).filter(c => {\n    const ok = norm(c).length > 15 && source.includes(norm(c));\n    if (!ok) citRejetees++;\n    return ok;\n  });\n  fiches.push({\n    numero: m.numero,\n    resume: String(f.resume).trim(),\n    idees_cles: f.idees_cles || [],\n    personnages: f.personnages_ou_acteurs || [],\n    citations\n  });\n});\n\nif (!fiches.length) throw new Error(\"Aucune fiche exploitable : vérifier qu'Ollama répond et que le modèle existe.\");\n\nconst total = morceaux[0].total;\nconst bloc = f => `### Partie ${f.numero}/${total}\\n${f.resume}\\nIdées : ${f.idees_cles.join(' ; ')}`;\n\n// Livre court : synthèse directe. Livre long : on regroupe par 8 parties d'abord.\nconst TAILLE_GROUPE = 8;\nconst groupes = [];\nfor (let i = 0; i < fiches.length; i += TAILLE_GROUPE) groupes.push(fiches.slice(i, i + TAILLE_GROUPE));\nconst matiere = fiches.map(bloc).join('\\n\\n');\n\nreturn [{ json: {\n  titre: morceaux[0].titre, auteur: morceaux[0].auteur, nb_caracteres: morceaux[0].nb_caracteres,\n  total, fiches, alertes, citations_rejetees: citRejetees,\n  livre_long: matiere.length > 60000,\n  groupes: groupes.map((g, k) => ({\n    numero: k + 1,\n    de: g[0].numero, a: g[g.length - 1].numero,\n    matiere: g.map(bloc).join('\\n\\n')\n  })),\n  matiere\n} }];"
+      },
+      "name": "Collecter les fiches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        300
+      ],
+      "id": "7f95c43d-3f70-4496-972e-b494d8bf3134"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "82e379f5-7930-4aa7-a45c-fd9dc3939b34",
+              "leftValue": "={{ $json.livre_long }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Livre long ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        300
+      ],
+      "id": "26be45a4-9844-43da-b4cd-44ebb45111d6"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== LIVRE LONG : un item par groupe de 8 parties =====\nconst p = $('PARAMÈTRES (écris ici)').first().json;\nconst c = $json;\nreturn c.groupes.map(g => ({ json: {\n  model: p.modele,\n  system: `Tu condenses des fiches de lecture successives d'un même livre en UN résumé de section de 300 à 450 mots, en français. Tu gardes l'ordre, les noms propres exacts et les idées majeures. Tu n'ajoutes RIEN qui ne soit pas dans les fiches. Réponds directement par le texte, sans titre ni commentaire.`,\n  prompt: `LIVRE : ${c.titre}\\nSECTION : parties ${g.de} à ${g.a} sur ${c.total}\\n\\n${g.matiere}`,\n  stream: false,\n  options: { num_ctx: 16384, temperature: 0.2 },\n  _de: g.de, _a: g.a\n} }));"
+      },
+      "name": "Éclater en sections",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        140
+      ],
+      "id": "7aa0a467-5919-446f-97f3-9d9e9011ad2c"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "name": "Boucle sections",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2420,
+        140
+      ],
+      "id": "31bb48e3-f41e-43ec-8f9a-5d130633566f"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model: $json.model, system: $json.system, prompt: $json.prompt, stream: false, options: $json.options}) }}",
+        "options": {
+          "timeout": 900000
+        }
+      },
+      "name": "Ollama — SECTIONS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        -40
+      ],
+      "id": "1fba40bf-044b-43d7-bc66-f4feade2a94c",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== LIVRE LONG : assembler les résumés de sections =====\nconst c = $('Collecter les fiches').first().json;\nconst sections = $input.all().map((it, k) => {\n  const g = c.groupes[k];\n  const txt = String(it.json.response || '').replace(/<think>[\\s\\S]*?<\\/think>/g, '').trim();\n  return `### Section ${g.numero} (parties ${g.de} à ${g.a} sur ${c.total})\\n${txt}`;\n});\nreturn [{ json: { ...c, matiere: sections.join('\\n\\n') } }];"
+      },
+      "name": "Assembler les sections",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        140
+      ],
+      "id": "36c0debd-0319-4238-97f3-2b678d7666b7"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== BODY POUR LA SYNTHÈSE FINALE (markdown) =====\nconst p = $('PARAMÈTRES (écris ici)').first().json;\nconst c = $json;\nconst court = p.niveau === 'court';\n\nconst plan = court\n  ? `## En une phrase\n(une seule phrase)\n\n## Résumé\n(300 à 400 mots, en prose)\n\n## Idées clés\n(5 puces maximum)`\n  : `## En une phrase\n(une seule phrase)\n\n## Résumé\n(700 à 1000 mots, en prose, qui suit l'ordre du livre)\n\n## Structure du livre\n(une puce par grand mouvement ou grande partie, avec ce qui s'y passe)\n\n## Idées clés\n(5 à 10 puces : thèses, leçons, arguments majeurs)\n\n## Personnages / acteurs principaux\n(une puce par nom : son rôle en une ligne ; omets la section si c'est un essai sans acteurs)\n\n## Ce qu'il faut retenir\n(3 à 5 puces actionnables ou mémorables)`;\n\nconst system = `Tu es un analyste littéraire. À partir de fiches de lecture successives couvrant TOUT un livre, tu rédiges sa synthèse finale en français, en markdown.\n\nRÈGLES ABSOLUES :\n1. Tu n'utilises QUE le contenu des fiches. Aucune connaissance extérieure sur le livre ou l'auteur, aucune invention.\n2. Tu respectes EXACTEMENT ce plan, titres compris, et rien d'autre :\n\n${plan}\n\n3. Tu commences directement par « ## En une phrase ». Aucune introduction, aucun commentaire final.\n4. Pas de citations entre guillemets : elles sont ajoutées séparément après vérification.\n5. Si des fiches se contredisent, tu suis l'ordre du livre et tu restes prudent.`;\n\nconst prompt = `LIVRE : ${c.titre}${c.auteur ? ' — ' + c.auteur : ''}${p.consigne ? '\\nANGLE DEMANDÉ : ' + p.consigne : ''}\n\nFICHES DE LECTURE (dans l'ordre du livre) :\n\n${c.matiere}`;\n\nreturn [{ json: {\n  model: p.modele, system, prompt, stream: false,\n  options: { num_ctx: 32768, temperature: 0.3 }\n} }];"
+      },
+      "name": "Préparer requête Synthèse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        300
+      ],
+      "id": "7cab6cff-0909-4e0d-9689-d4aa530d5635"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model: $json.model, system: $json.system, prompt: $json.prompt, stream: false, options: $json.options}) }}",
+        "options": {
+          "timeout": 1800000
+        }
+      },
+      "name": "Ollama — SYNTHÈSE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        300
+      ],
+      "id": "c9fb9f5c-a50e-4b43-ac4d-1dde58ad4f85",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== RÉSULTAT FINAL — le résumé est ici, et dans le fichier =====\nconst p = $('PARAMÈTRES (écris ici)').first().json;\nconst c = $('Collecter les fiches').first().json;\nconst synthese = String($json.response || '').replace(/<think>[\\s\\S]*?<\\/think>/g, '').trim();\n\nconst citations = c.fiches.flatMap(f => f.citations.map(q => `> « ${q.replace(/^[\"«\\s]+|[\"»\\s]+$/g, '')} »\\n> — partie ${f.numero}/${c.total}`));\nconst selection = citations.filter((_, i) => i % Math.max(1, Math.ceil(citations.length / 8)) === 0).slice(0, 8);\n\nconst lignes = [\n  `# Résumé — ${c.titre}${c.auteur ? ' (' + c.auteur + ')' : ''}`,\n  '',\n  `> Atelier Lecture — ${new Date().toLocaleDateString('fr-FR')} · fichier : ${p.fichier} · modèle : ${p.modele} · ${c.total} parties lues (${Math.round(c.nb_caracteres / 1000)} k caractères)`,\n  '> Résumé généré 100 % en local. Relire avant tout usage public : un modèle 4B peut simplifier ou confondre.',\n  '',\n  synthese,\n  ''\n];\nif (selection.length) {\n  lignes.push('## Citations (vérifiées mot pour mot dans le texte)', '', selection.join('\\n\\n'), '');\n}\nif (p.niveau !== 'court') {\n  lignes.push('---', '', '## Annexe — fiches par partie', '');\n  for (const f of c.fiches) lignes.push(`### Partie ${f.numero}/${c.total}`, f.resume, '');\n}\nlignes.push('---', '## Rapport de production',\n  `- Parties lues : ${c.fiches.length}/${c.total}`,\n  `- Mode : ${c.livre_long ? 'livre long (synthèse en 2 étages)' : 'synthèse directe'}`,\n  `- Citations rejetées (non retrouvées mot pour mot) : ${c.citations_rejetees}`,\n  ...c.alertes.map(a => `- ⚠️ ${a}`));\n\nconst texte = lignes.join('\\n');\nconst slug = (c.titre || 'livre').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')\n  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 40);\nconst horodatage = new Date().toISOString().substring(0, 16).replace(/[:T]/g, '-');\n\nreturn [{ json: {\n  RESUME: synthese,\n  qualite: { parties_lues: c.fiches.length, total: c.total, citations_rejetees: c.citations_rejetees, alertes: c.alertes },\n  texte,\n  fileName: `/home/node/sorties/resume-${slug}-${horodatage}.md`\n} }];"
+      },
+      "name": "RÉSULTAT FINAL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        300
+      ],
+      "id": "154a436c-77b0-4868-a28a-b016e0d654aa"
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "texte",
+        "options": {}
+      },
+      "name": "Convertir en fichier",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        3520,
+        300
+      ],
+      "id": "ad825c48-9b1b-490d-87bb-3e010eacc9d3"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('RÉSULTAT FINAL').first().json.fileName }}",
+        "options": {}
+      },
+      "name": "Écrire le résumé",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        3740,
+        300
+      ],
+      "id": "4775f8eb-12d1-430b-88d0-5ec07ce6109c"
+    }
+  ],
+  "connections": {
+    "Démarrage manuel": {
+      "main": [
+        [
+          {
+            "node": "PARAMÈTRES (écris ici)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARAMÈTRES (écris ici)": {
+      "main": [
+        [
+          {
+            "node": "Lire le livre",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire le livre": {
+      "main": [
+        [
+          {
+            "node": "PDF ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF ?": {
+      "main": [
+        [
+          {
+            "node": "Extraire texte PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extraire texte brut",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraire texte PDF": {
+      "main": [
+        [
+          {
+            "node": "Découper en morceaux",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraire texte brut": {
+      "main": [
+        [
+          {
+            "node": "Découper en morceaux",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Découper en morceaux": {
+      "main": [
+        [
+          {
+            "node": "Préparer requête Lecteur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer requête Lecteur": {
+      "main": [
+        [
+          {
+            "node": "Boucle lecture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Boucle lecture": {
+      "main": [
+        [
+          {
+            "node": "Collecter les fiches",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ollama — LECTEUR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama — LECTEUR": {
+      "main": [
+        [
+          {
+            "node": "Boucle lecture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collecter les fiches": {
+      "main": [
+        [
+          {
+            "node": "Livre long ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Livre long ?": {
+      "main": [
+        [
+          {
+            "node": "Éclater en sections",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Préparer requête Synthèse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Éclater en sections": {
+      "main": [
+        [
+          {
+            "node": "Boucle sections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Boucle sections": {
+      "main": [
+        [
+          {
+            "node": "Assembler les sections",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ollama — SECTIONS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama — SECTIONS": {
+      "main": [
+        [
+          {
+            "node": "Boucle sections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assembler les sections": {
+      "main": [
+        [
+          {
+            "node": "Préparer requête Synthèse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer requête Synthèse": {
+      "main": [
+        [
+          {
+            "node": "Ollama — SYNTHÈSE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama — SYNTHÈSE": {
+      "main": [
+        [
+          {
+            "node": "RÉSULTAT FINAL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RÉSULTAT FINAL": {
+      "main": [
+        [
+          {
+            "node": "Convertir en fichier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convertir en fichier": {
+      "main": [
+        [
+          {
+            "node": "Écrire le résumé",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "active": false
+}
