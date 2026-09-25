@@ -43,8 +43,8 @@ Seul le résumé de livre ? `gemma4:e4b` suffit.
 
 ```bash
 gh auth login                   # le dépôt est privé : se connecter à GitHub
-gh repo clone Naanasba99/atelier-ecriture-local
-cd atelier-ecriture-local
+gh repo clone Naanasba99/atelier-ia-local
+cd atelier-ia-local
 ```
 
 ## Étape 4 — Préparer les dossiers
@@ -56,15 +56,19 @@ cp exemples/briefs/*.md briefs/      # puis remplacer par tes propres briefs
 
 ## Étape 5 — Lancer n8n
 
+> **Nouvelle installation** : ouvre `docker-compose-n8n-local.yml` et, dans la section `volumes`,
+> commente la ligne `n8n_sangour3i_data` (le volume de la machine d'origine) et décommente
+> `n8n_local_data` (base vierge). Ainsi tu pars d'une instance propre, sans les credentials d'origine.
+
 ```bash
-docker compose -p atelier-ecriture -f docker-compose-n8n-atelier.yml up -d
-docker ps | grep n8n-atelier         # doit afficher « Up »
+docker compose -p n8n-local -f docker-compose-n8n-local.yml up -d
+docker ps | grep n8n-local           # doit afficher « Up »
 ```
 
-Ouvrir **http://localhost:5679** et créer le compte propriétaire (e-mail + mot de passe,
+Ouvrir **http://localhost:5680** et créer le compte propriétaire (e-mail + mot de passe,
 reste local à la machine).
 
-> Le fuseau horaire est réglé sur `Africa/Ndjamena` dans le compose : l'adapter si besoin.
+> Le fuseau horaire est réglé sur `America/Mexico_City` dans le compose : l'adapter à ta zone si besoin.
 
 ## Étape 6 — Importer les workflows
 

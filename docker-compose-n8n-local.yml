@@ -1,0 +1,35 @@
+# n8n LOCAL unifié — « mon atelier IA local »
+# Fusion des anciens n8n-sangour3i (accès e-mail/Telegram/API + clé) et n8n-atelier-ecriture (écriture/lecture).
+# Conserve le volume existant n8n_sangour3i_data → credentials, clé de chiffrement et workflows préservés.
+# Démarrer : docker compose -p n8n-local -f docker-compose-n8n-local.yml up -d
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n-local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5680:5678"          # accessible seulement depuis cette machine
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # pour joindre Ollama (11434) et le fact-check (5077) sur le Mac
+    environment:
+      - GENERIC_TIMEZONE=America/Mexico_City
+      - TZ=America/Mexico_City
+      - N8N_SECURE_COOKIE=false
+      - N8N_EDITOR_BASE_URL=http://localhost:5680
+      - WEBHOOK_URL=http://localhost:5680
+      # accès fichiers autorisé pour le résumé de livre et l'écriture
+      - N8N_RESTRICT_FILE_ACCESS_TO=/home/node/briefs;/home/node/sorties;/home/node/livres
+    volumes:
+      # Sur la machine d'origine : réutilise le volume existant (credentials + clé + workflows).
+      - n8n_sangour3i_data:/home/node/.n8n
+      # NOUVELLE INSTALLATION (autre machine) : commente la ligne ci-dessus et décommente celle-ci
+      # pour repartir d'une base vierge, puis importe les workflows (voir docs/INSTALLATION.md) :
+      # - n8n_local_data:/home/node/.n8n
+      - ./briefs:/home/node/briefs
+      - ./sorties:/home/node/sorties
+      - ./livres:/home/node/livres
+
+volumes:
+  n8n_sangour3i_data:
+    external: true                              # volume déjà présent, on le réutilise
+  # n8n_local_data:                             # décommenter pour une nouvelle installation vierge

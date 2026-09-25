@@ -32,6 +32,11 @@ Il est construit avec trois briques gratuites :
 
 ---
 
+> **Note (24/09/2026)** : l'atelier tourne désormais dans **un seul conteneur n8n local**
+> (`n8n-local`, http://localhost:5680), défini par `docker-compose-n8n-local.yml`. Il réunit
+> l'écriture, la lecture (résumé de livres) et les agents locaux. L'ancien fichier
+> `docker-compose-n8n-atelier.yml` (port 5679) est conservé en `.OBSOLETE` pour référence.
+
 ## Démarrage rapide (machine déjà installée)
 
 ```bash
